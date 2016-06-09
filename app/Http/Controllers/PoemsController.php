@@ -10,11 +10,50 @@ use App\Http\Requests;
 
 class PoemsController extends Controller
 {
-    public function index(){
-    	$poems = Poem::all();
+
+    public function __construct()
+    {
+        $this->middleware('jwt.auth');
+    }
+    
+    public function index(Request $request){
+
+
+        $search_term = $request->input('search');
+        $limit = $request->input('limit')?$request->input('limit') : 5;
+
+        if($search_term){
+
+            $poems = Poem::orderBy('id','DESC')->where('body','LIKE',"%$search_term%")->with([
+                'User'=>function($query){
+                    $query->select('id','name');
+                }
+            ])->select('id','body','user_id')->paginate($limit);
+
+            $poems->appends([
+                'limit'     =>  $limit,
+                'search'    =>  $search_term
+            ]);
+
+        }else{
+
+            $poems = Poem::with([
+                'User'=>function($query){
+                    $query->select('id','name');
+                }
+            ])->select('id','body','user_id')->paginate($limit);
+
+            $poems->appends([
+                'limit'  =>  $limit
+            ]);
+
+        }
+
+
     	return Response::json([
             'data'   => $this->transformCollection($poems)
         ],200);
+
     }
 
     public function show($id)
@@ -93,11 +132,26 @@ class PoemsController extends Controller
 
     private function transformCollection($poems)
     {
-        return array_map([this,'transform'],$poems->toArray());
+
+        $poemsArray = $poems->toArray();
+
+        return [
+            'total' =>  $poemsArray['total'],
+            'per_page' =>  intval($poemsArray['per_page']),
+            'current_page' =>  $poemsArray['current_page'],
+            'last_page' =>  $poemsArray['last_page'],
+            'next_page_url' =>  $poemsArray['next_page_url'],
+            'prev_page_url' =>  $poemsArray['prev_page_url'],
+            'from' =>  $poemsArray['from'],
+            'to' =>  $poemsArray['to'],
+            'data'  =>  array_map([$this,'transform'],$poemsArray['data'])
+        ];
+
     }
 
     private function transform($poem)
     {
+
         return [
             'poem_id'           =>  $poem['id'],
             'poem'              =>  $poem['body'],
